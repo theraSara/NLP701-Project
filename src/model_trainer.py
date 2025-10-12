@@ -48,8 +48,7 @@ class ModelTrainer:
         
         tokenized = dataset.map(
             tokenize_func, 
-            batched=True,
-            remove_columns=[col for col in dataset['train'].column_names if col != 'label']
+            batched=True
         )
 
         print(f"After tokenization:")
@@ -61,27 +60,42 @@ class ModelTrainer:
     def compute_metrics(self, eval_pred):
         predictions, labels = eval_pred
         predictions = np.argmax(predictions, axis=1)
-        matrics = {
+        metrics = {
             'accuracy': accuracy_score(labels, predictions),
             'f1': f1_score(labels, predictions, average='weighted'),
             'precision': precision_score(labels, predictions, average='weighted', zero_division=0),
             'recall': recall_score(labels, predictions, average='weighted', zero_division=0),
         }
-        return matrics
+        return metrics
     
     def train(self, epochs=3, batch_size=32, learning_rate=2e-5):
         print(f"Training {self.model_name} on {self.dataset_name} dataset...")
         
+        # load dataset
         dataset = self.load_data()
 
+
+        # handle sst2 test set without labels
+        if self.dataset_name == 'sst2':
+            # since sst2 test set has no labels, split the validation set into val/test
+            val_test_split = dataset['validation'].train_test_split(test_size=0.5, seed=42)
+            dataset['validation'] = val_test_split['train']
+            dataset['test'] = val_test_split['test']
+
+            print(f"Validation size: {len(dataset['validation'])}")
+            print(f"Test size: {len(dataset['test'])}")
+
+        # load model and tokenizer
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         model = AutoModelForSequenceClassification.from_pretrained(
             self.model_name,
             num_labels=2
         )
 
+        # tokenize dataset (after splitting the val/test set for sst2)
         tokenized_dataset = self.tokenize_dataset(dataset, tokenizer)
 
+        # define training args
         training_args = TrainingArguments(
             output_dir=self.output_dir,
             eval_strategy="epoch",
@@ -96,7 +110,7 @@ class ModelTrainer:
             logging_dir=f'{self.output_dir}/logs',
             logging_steps=100,
             save_total_limit=2,
-            fp16=False, # False for Mac, True for GPU or otherwise
+            fp16=False, # False for Mac, True for GPU 
             report_to="none"
         )
 
@@ -111,20 +125,22 @@ class ModelTrainer:
 
         trainer.train()
 
+        # save the final model and tokenizer
         trainer.save_model(f"{self.output_dir}/final")
         tokenizer.save_pretrained(f"{self.output_dir}/final")
 
+        # evaluate on test set
         test_results = trainer.evaluate(tokenized_dataset['test'])
         print("Test Results:", test_results)
 
+        # save test results
         with open(f"{self.output_dir}/test_results.json", "w") as f:
             json.dump(test_results, f, indent=2)
 
         return test_results
     
 
-# change the model_name and dataset_name as needed for each combination.txt
-# change the batch_size from the combination.text too
+# change the model_name, dataset_name, and batch_size as needed for each combination.txt
 if __name__ == "__main__":
     trainer = ModelTrainer(
         model_name="distilbert-base-uncased",
