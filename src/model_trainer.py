@@ -23,22 +23,39 @@ class ModelTrainer:
             dataset['validation'] = train_val['test']
         else:
             raise ValueError(f"Unsupported dataset: {self.dataset_name}")
+        
+        print(f"Loaded {self.dataset_name}")
+        print(f"Train size: {len(dataset['train'])}")
+        print(f"Validation size: {len(dataset['validation'])}")
+        print(f"Test size: {len(dataset['test'])}")
+        print(f"Columns: {dataset['train'].column_names}")
+
         return dataset
     
     def tokenize_dataset(self, dataset, tokenizer):
         max_length = 128 if self.dataset_name == 'sst2' else 512
+        text_key = 'sentence' if self.dataset_name == 'sst2' else 'text'
 
         def tokenize_func(examples):
-            text_key = 'sentence' if self.dataset_name == 'sst2' else 'text' 
             tokenize = tokenizer(
                 examples[text_key], 
                 padding='max_length', 
                 truncation=True, 
                 max_length=max_length
             )
+            tokenize['labels'] = examples['label']
             return tokenize
         
-        tokenized = dataset.map(tokenize_func, batched=True)
+        tokenized = dataset.map(
+            tokenize_func, 
+            batched=True,
+            remove_columns=[col for col in dataset['train'].column_names if col != 'label']
+        )
+
+        print(f"After tokenization:")
+        print(f"Columns: {tokenized['train'].column_names}")
+        print(f"Sample keys: {list(tokenized['train'][0].keys())}")
+
         return tokenized
     
     def compute_metrics(self, eval_pred):
@@ -47,8 +64,8 @@ class ModelTrainer:
         matrics = {
             'accuracy': accuracy_score(labels, predictions),
             'f1': f1_score(labels, predictions, average='weighted'),
-            'precision': precision_score(labels, predictions, average='weighted'),
-            'recall': recall_score(labels, predictions, average='weighted'),
+            'precision': precision_score(labels, predictions, average='weighted', zero_division=0),
+            'recall': recall_score(labels, predictions, average='weighted', zero_division=0),
         }
         return matrics
     
@@ -79,7 +96,8 @@ class ModelTrainer:
             logging_dir=f'{self.output_dir}/logs',
             logging_steps=100,
             save_total_limit=2,
-            fp16=False # False for Mac, True for GPU or otherwise
+            fp16=False, # False for Mac, True for GPU or otherwise
+            report_to="none"
         )
 
         trainer = Trainer(
@@ -114,5 +132,3 @@ if __name__ == "__main__":
         output_dir="./models/distilbert_sst2"
     )
     results = trainer.train()
-
-
