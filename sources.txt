@@ -1,0 +1,78 @@
+Some GitHub and other code sources:
+
+1. BertViz: Visualize Attention in NLP Models: https://github.com/jessevig/bertviz
+2. Captum: https://captum.ai/tutorials/Bert_SQUAD_Interpret
+3. SHAP (SHapley Additive exPlanations): https://github.com/shap/shap
+4. Lime: Explaining the predictions of any machine learning classifier: https://github.com/marcotcr/lime
+https://marcotcr.github.io/lime/tutorials/Lime%20-%20basic%20usage%2C%20two%20class%20case.html
+5. Counterfactual sentences: https://github.com/tongshuangwu/polyjuice
+Other source to do the counterfactual explanations: https://github.com/allenai/mice
+
+
+PHASE 1: Setup and Baseline
+1. Set the environment
+
+2. Data loading and exploration
+    - load SST-2 and IMDB using HuggingFace (HF) ``datasets``
+    - create stratified samples (500-1000 examples as we proposed)
+    - document dataset statistics
+
+3. Model fine-tuning
+    - starting with DistilBERT on SST-2
+    - use HF trainer API
+    - track metrics: accuracy, F1, training time
+    - save checkpoints
+
+PHASE 2: Interpretability Methods
+1. Attention Visualization
+    - extract attention weights from the models 
+    - visualize using BertViz 
+    - save attention matrices for evaluation
+
+2. Integrated Gradients
+    - use Captum's ``LayerIntegratedGradients``
+    - generate attrubutions for sampled examples
+
+3. SHAP
+    - use ``shap.Explainer`` with transformer models
+    - limit to 100-200 examples (it is computationally costly...)
+
+4. LIME 
+    - create text explainer 
+    - generate local explanations
+
+5. Counterfactuals --> the most complex (leave it last if there's a time to even implement it)
+    - start simple: token deletion/replacement
+    - if time: use Polyjuice or mice (above in the sources)
+
+PHASE 3: Evaluation 
+1. Faithfulness
+2. Stability
+3. LLM-as-Judge
+
+
+here are the steps (pipeline) that i configured that we need to keep in mind while working:
+STEP 1: TRAINING (model_trainer.py)
+    - Use: FULL training dataset (all 67k SST-2 / 25k IMDB)
+    - Why: Train the best possible model
+    - Output: Trained model checkpoint
+
+STEP 2: INFERENCE (after training)
+    - Use: FULL test set for accuracy metrics
+    - Output: Test accuracy, F1, and other measures if needed
+
+STEP 3: SAMPLING (explanation_generator.py)
+    - Use: Sample 500-1000 from test set (as we mentioned in the proposal)
+    - Why: Generating explanations is computationally expensive 
+        (especially SHAP - can take 10-30 seconds per example)
+        What i think is suitable is: 500 examples × 4 methods = 2000 explanations per model
+    - Output: Sampled examples for interpretation
+
+STEP 4: EXPLANATION GENERATION (explanation_generator.py)
+    - Use: The 500-1000 sampled examples
+    - Apply: All 4 interpretability methods
+    - Output: Explanations saved to disk
+
+STEP 5: EVALUATION (faithfulness.py, stability.py, and llm_judge.py)
+    - Use: The generated explanations
+    - Output: Faithfulness, stability, and llm_judge metrics
