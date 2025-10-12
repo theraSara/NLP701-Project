@@ -57,7 +57,7 @@ STEP 1: TRAINING (model_trainer.py)
     - Why: Train the best possible model
     - Output: Trained model checkpoint
 
-STEP 2: INFERENCE (after training)
+STEP 2: INFERENCE (consolidate_results.py) then (data_sampler.py)
     - Use: FULL test set for accuracy metrics
     - Output: Test accuracy, F1, and other measures if needed
 
