@@ -78,5 +78,5 @@ if __name__ == "__main__":
     print("Sampling SST-2 dataset")
     sampler.sample_data('sst2', n_sampled=500) # uncomment the one you want to sample, and comment the other one
 
-    #print("Sampling IMDB dataset")
-    #sampler.sample_data('imdb', n_sampled=500)
+    print("Sampling IMDB dataset")
+    sampler.sample_data('imdb', n_sampled=500)
