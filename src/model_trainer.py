@@ -68,7 +68,7 @@ class ModelTrainer:
         }
         return metrics
     
-    def train(self, epochs=3, batch_size=32, learning_rate=2e-5):
+    def train(self, epochs=3, batch_size=16, learning_rate=2e-5):
         print(f"Training {self.model_name} on {self.dataset_name} dataset...")
         
         # load dataset
@@ -143,8 +143,8 @@ class ModelTrainer:
 # change the model_name, dataset_name, and batch_size as needed for each combination.txt
 if __name__ == "__main__":
     trainer = ModelTrainer(
-        model_name="distilbert-base-uncased",
-        dataset_name="sst2",
-        output_dir="./models/distilbert_sst2"
+        model_name="albert-base-v2",
+        dataset_name="imdb",
+        output_dir="./models/albert_imdb"
     )
     results = trainer.train()
