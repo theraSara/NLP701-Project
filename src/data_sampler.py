@@ -26,33 +26,48 @@ class DataSampler:
         else: 
             raise ValueError(f"Unknown dataset: {dataset_name}")
         
-        print(f"Total test samples in {dataset_name}: {len(test_data)}")
-        print(f"Sampling: {n_sampled} examples")
+        actual_n_samples = min(n_sampled, len(test_data))
+        print(f"Requested {n_sampled}, but only {actual_n_samples} available")
+        print(f"Sampling: {actual_n_samples} examples")
+
+        by_label = {0: [], 1: []}
+        for i, ex in enumerate(test_data):
+            by_label[ex['label']].append(i)
+
+        print(f"Label 0 has {len(by_label[0])} samples")
+        print(f"Label 1 has {len(by_label[1])} samples")
+        
+        n_per_class = actual_n_samples // 2
+        selected = []
+        for label in [0, 1]:
+            k = min(n_per_class, len(by_label[label]))
+            selected += random.sample(by_label[label], k)
+
+        shortfall = actual_n_samples - len(selected)
+        if shortfall > 0:
+            remaining = list(set(range(len(test_data))) - set(selected))
+            extra = random.sample(remaining, min(shortfall, len(remaining)))
+            selected += extra
 
         samples = {
             'texts': [],
             'labels': [],
             'indices': []
         }
+        for idx in selected:
+            samples['texts'].append(test_data[idx][text_key])
+            samples['labels'].append(int(test_data[idx]['label']))
+            samples['indices'].append(idx)
 
-        for label in [0, 1]:
-            label_indices = [i for i, ex in enumerate(test_data) if ex['label'] == label]
-            print(f"Label {label} has {len(label_indices)} samples")
+        assert len(samples['texts']) == len(samples['labels']) == len(samples['indices']) == len(selected)
 
-            n_per_class = n_sampled // 2
-            n_to_sample = min(n_per_class, len(label_indices))
-            sampled_indices = random.sample(label_indices, n_to_sample)
-
-            for idx in sampled_indices:
-                samples['texts'].append(test_data[idx][text_key])
-                samples['labels'].append(test_data[idx]['label'])
-                samples['indices'].append(idx)
-
+        n_negative = samples['labels'].count(0)
+        n_positive = samples['labels'].count(1)
         print(f"Total sampled: {len(samples['texts'])} exampels")
-        print("Negatice labels (0): {samples['labels'].count(0)}")
-        print("Positive labels (1): {samples['labels'].count(1)}")
+        print(f"Negative labels (0): {n_negative}")
+        print(f"Positive labels (1): {n_positive}")
 
-        output_file = self.output_dir / f"{dataset_name}_samppled_{n_sampled}.pkl"
+        output_file = self.output_dir / f"{dataset_name}_sampled_{actual_n_samples}.pkl"
         with open(output_file, 'wb') as f:
             pickle.dump(samples, f)
 
@@ -60,11 +75,17 @@ class DataSampler:
         return samples
     
     def load_samples(self, dataset_name, n_sampled=500):
-        input_file = self.output_dir / f"{dataset_name}_samppled_{n_sampled}.pkl"
+        input_file = self.output_dir / f"{dataset_name}_sampled_{n_sampled}.pkl"
         
+        if not input_file.exists() and dataset_name == 'sst2':
+            alt = self.output_dir / f"{dataset_name}_sampled_436.pkl"
+            if alt.exists():
+                input_file = alt
+                print(f"Using available sample file: {alt}")
+            
         if not input_file.exists():
             print(f"Sample file not found: {input_file}")
-            return self.sample_test_set(dataset_name, n_sampled)
+            return self.sample_data(dataset_name, n_sampled)
 
         with open(input_file, 'rb') as f:
             samples = pickle.load(f)
@@ -76,7 +97,11 @@ if __name__ == "__main__":
     sampler = DataSampler()
 
     print("Sampling SST-2 dataset")
-    sampler.sample_data('sst2', n_sampled=500) # uncomment the one you want to sample, and comment the other one
+    sst_samples = sampler.sample_data('sst2', n_sampled=500) 
 
     print("Sampling IMDB dataset")
-    sampler.sample_data('imdb', n_sampled=500)
+    imdb_samples = sampler.sample_data('imdb', n_sampled=500)
+
+    print("Summary:")
+    print(f"SST-2: {len(sst_samples['texts'])} examples")
+    print(f"IMDB: {len(imdb_samples['texts'])} examples")
