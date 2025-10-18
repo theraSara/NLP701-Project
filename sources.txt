@@ -70,7 +70,11 @@ STEP 1: TRAINING (model_trainer.py) --> DONE
     - Why: Train the best possible model
     - Output: Trained model checkpoint (/models)
 
+<<<<<<< HEAD
 STEP 2: INFERENCE (after training)
+=======
+STEP 2: INFERENCE (after training) --> DONE
+>>>>>>> 0cd70999bb72719fa70accec54e26b25f71931de
     - Use: FULL test set for accuracy metrics
     - Output: Test accuracy, F1, and other measures if needed (/results/model_performance_summary.csv)
 
@@ -88,4 +92,28 @@ STEP 4: EXPLANATION GENERATION (explanation_generator.py)
 
 STEP 5: EVALUATION (faithfulness.py, stability.py, and llm_judge.py)
     - Use: The generated explanations
+<<<<<<< HEAD
     - Output: Faithfulness, stability, and llm_judge metrics
+=======
+    - Output: Faithfulness, stability, and llm_judge metrics
+
+
+
+
+Work division:
+Divide the work by dataset.
+1. SST-2 dataset has 424 total samples
+3 models
+4 methods
+So the total number of samples would be: 424*3*4=5088 explanations
+Estimated time to run all methods together would be around 10-15 hours
+
+2. IMDB dataset has 500 total samples
+3 models
+4 methods
+So the total number of samples would be: 500*3*4=6000 explanations
+Estimated time to run all methods together would be around 12-18 hours (longer texts/reviews)
+
+This way each one of us will focus on one dataset and we can work in parallel instead of waiting for each others results.
+
+>>>>>>> 0cd70999bb72719fa70accec54e26b25f71931de
