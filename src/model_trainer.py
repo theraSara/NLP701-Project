@@ -1,10 +1,13 @@
+import os
+import csv
 import json
-import evaluate
+import time
+import datetime
 import numpy as np
 from datasets import load_dataset
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments, EarlyStoppingCallback
-
+from utils import extract_eval_logs, best_epoch_and_dev, write_dev_curve
 
 class ModelTrainer:
     def __init__(self, model_name, dataset_name, output_dir):
@@ -68,8 +71,10 @@ class ModelTrainer:
         }
         return metrics
     
-    def train(self, epochs=3, batch_size=16, learning_rate=2e-5):
+    def train(self, epochs=5, batch_size=16, learning_rate=2e-5):
         print(f"Training {self.model_name} on {self.dataset_name} dataset...")
+        
+        t0 = time.time()
         
         # load dataset
         dataset = self.load_data()
@@ -92,7 +97,6 @@ class ModelTrainer:
             num_labels=2
         )
 
-        # tokenize dataset (after splitting the val/test set for sst2)
         tokenized_dataset = self.tokenize_dataset(dataset, tokenizer)
 
         # define training args
@@ -105,10 +109,13 @@ class ModelTrainer:
             per_device_eval_batch_size=batch_size,
             num_train_epochs=epochs,
             weight_decay=0.01,
+            warmup_ratio=0.1,
             load_best_model_at_end=True,
             metric_for_best_model="accuracy",
+            greater_is_better=True,
             logging_dir=f'{self.output_dir}/logs',
-            logging_steps=100,
+            logging_strategy="epoch",
+            logging_steps=1,
             save_total_limit=2,
             fp16=False, # False for Mac, True for GPU 
             report_to="none"
@@ -125,6 +132,11 @@ class ModelTrainer:
 
         trainer.train()
 
+        # extract per-epoch eval logs, write curve artifacts
+        eval_logs = extract_eval_logs(trainer)
+        write_dev_curve(self.output_dir, self.model_name, self.dataset_name, eval_logs)
+        best_epoch, best_dev_acc = best_epoch_and_dev(eval_logs, metric='eval_accuracy')
+
         # save the final model and tokenizer
         trainer.save_model(f"{self.output_dir}/final")
         tokenizer.save_pretrained(f"{self.output_dir}/final")
@@ -137,14 +149,99 @@ class ModelTrainer:
         with open(f"{self.output_dir}/test_results.json", "w") as f:
             json.dump(test_results, f, indent=2)
 
-        return test_results
+        elapsed = time.time() - t0
+        finished_at = datetime.datetime.now().isoformat(timespec='seconds')
+        
+        summary = {
+            "model": self.model_name,
+            "dataset": self.dataset_name,
+            "best_epoch": best_epoch,
+            "dev_acc": float(best_dev_acc) if best_dev_acc is not None else None,
+            "test_acc": float(test_results.get('eval_accuracy', float('nan'))),
+            "fit_time_seconds": round(elapsed, 2),
+            "finished_at": finished_at
+        }
+        print("Summary: ", summary)
+        
+        return summary
     
+SUMMARY_CSV = './models/summary.csv'
+TRAINING_CONFIGS = [
+    {
+        'model':'distilbert-base-uncased',
+        'dataset':'sst2',
+        'output_dir':'./models/distilbert_sst2',
+        'batch_size':32
+    },
+    {
+        'model':'distilbert-base-uncased',
+        'dataset':'imdb',
+        'output_dir':'./models/distilbert_imdb',
+        'batch_size':16
+    },
+    {
+        'model':'huawei-noah/TinyBERT_General_4L_312D',
+        'dataset':'sst2',
+        'output_dir':'./models/tinybert_sst2',
+        'batch_size':32
+    },
+    {
+        'model':'huawei-noah/TinyBERT_General_4L_312D',
+        'dataset':'imdb',
+        'output_dir':'./models/tinybert_imdb',
+        'batch_size':16
+    },
+    {
+        'model':'albert-base-v2',
+        'dataset':'sst2',
+        'output_dir':'./models/albert_sst2',
+        'batch_size':32
+    },
+    {
+        'model':'albert-base-v2',
+        'dataset':'imdb',
+        'output_dir':'./models/albert_imdb',
+        'batch_size':16
+    },
+]
 
-# change the model_name, dataset_name, and batch_size as needed for each combination.txt
+def run_all(configs):
+    fieldnames=[
+        "model",
+        "dataset",
+        "best_epoch",
+        "dev_acc",
+        "test_acc",
+        "fit_time_seconds",
+        "finished_at",
+        "output_dir"
+    ]
+    
+    os.makedirs("models", exist_ok=True)
+    if not os.path.exists(SUMMARY_CSV):
+        with open(SUMMARY_CSV, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+
+    for cfg in configs:
+        trainer = ModelTrainer(
+            model_name=cfg['model'],
+            dataset_name=cfg['dataset'],
+            output_dir=cfg['output_dir']
+        )
+
+        summary = trainer.train(
+            epochs=cfg.get('epochs', 3),
+            batch_size=cfg.get('batch_size', 16),
+            learning_rate=cfg.get('learning_rate', 2e-5)
+        )
+
+        summary["output_dir"] = cfg['output_dir']
+        with open(SUMMARY_CSV, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writerow(summary)
+        
+        print(f"Appended summary line to {SUMMARY_CSV}")
+
 if __name__ == "__main__":
-    trainer = ModelTrainer(
-        model_name="albert-base-v2",
-        dataset_name="imdb",
-        output_dir="./models/albert_imdb"
-    )
-    results = trainer.train()
+    run_all(TRAINING_CONFIGS)
