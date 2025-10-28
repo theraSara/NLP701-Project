@@ -10,6 +10,7 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trainer, TrainingArguments, EarlyStoppingCallback
 from utils import extract_eval_logs, best_epoch_and_dev, write_dev_curve
 
+torch.set_float32_matmul_precision("high")
 
 def precision_kwargs():
     if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -89,8 +90,7 @@ class ModelTrainer:
         
         # load dataset
         dataset = self.load_data()
-
-
+        
         # handle sst2 test set without labels
         if self.dataset_name == 'sst2':
             # since sst2 test set has no labels, split the validation set into val/test
@@ -102,13 +102,20 @@ class ModelTrainer:
             print(f"Test size: {len(dataset['test'])}")
 
         # load model and tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name, use_fast=True)
         model = AutoModelForSequenceClassification.from_pretrained(
             self.model_name,
             num_labels=2
         )
+        
+        print("cuda_available:", torch.cuda.is_available())
+        if torch.cuda.is_available():
+            print("gpu:", torch.cuda.get_device_name(0))
+        print("model device before Trainer:", next(model.parameters()).device)
 
         tokenized_dataset = self.tokenize_dataset(dataset, tokenizer)
+        
+        optim_name = "adamw_torch_fused" if torch.cuda.is_available() else "adamw_torch"
 
         # define training args
         training_args = TrainingArguments(
@@ -128,10 +135,15 @@ class ModelTrainer:
             logging_strategy="epoch",
             logging_steps=1,
             save_total_limit=2,
-            optim="adamw_torch_fused",
-            dataloader_num_workers=4,
+            optim=optim_name,
             report_to="none",
-            **precision_kwargs()
+            dataloader_num_workers=4,
+            dataloader_pin_memory=torch.cuda.is_available(),
+            dataloader_persistent_workers=True if 4 > 0 else False,
+            no_cuda=False,
+            **precision_kwargs(),
+            #torch_compile=torch.cuda.is_available(),
+            #seed=42, data_seed=42,
         )
 
         trainer = Trainer(
@@ -140,8 +152,10 @@ class ModelTrainer:
             train_dataset=tokenized_dataset['train'],
             eval_dataset=tokenized_dataset['validation'],
             compute_metrics=self.compute_metrics,
-            callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=10)],
         )
+        
+        print("trainer device:", trainer.args.device)
 
         trainer.train()
 
@@ -180,26 +194,16 @@ class ModelTrainer:
     
 SUMMARY_CSV = './models/summary.csv'
 TRAINING_CONFIGS = [
+    #{'model':'distilbert-base-uncased','dataset':'sst2','output_dir':'./models/distilbert_sst2','batch_size':32},
+    #{'model':'distilbert-base-uncased','dataset':'imdb','output_dir':'./models/distilbert_imdb','batch_size':16},
     {
-        'model':'distilbert-base-uncased',
-        'dataset':'sst2',
-        'output_dir':'./models/distilbert_sst2',
-        'batch_size':32
-    },
-    {
-        'model':'distilbert-base-uncased',
-        'dataset':'imdb',
-        'output_dir':'./models/distilbert_imdb',
-        'batch_size':16
-    },
-    {
-        'model':'huawei-noah/TinyBERT_General_4L_312D',
+        'model': 'kallidavidson/TinyBERT_General_4L_312D',
         'dataset':'sst2',
         'output_dir':'./models/tinybert_sst2',
         'batch_size':32
     },
     {
-        'model':'huawei-noah/TinyBERT_General_4L_312D',
+        'model': 'kallidavidson/TinyBERT_General_4L_312D',
         'dataset':'imdb',
         'output_dir':'./models/tinybert_imdb',
         'batch_size':16
@@ -244,7 +248,7 @@ def run_all(configs):
         )
 
         summary = trainer.train(
-            epochs=cfg.get('epochs', 3),
+            epochs=cfg.get('epochs', 5),
             batch_size=cfg.get('batch_size', 16),
             learning_rate=cfg.get('learning_rate', 2e-5)
         )
@@ -259,7 +263,3 @@ def run_all(configs):
 if __name__ == "__main__":
     run_all(TRAINING_CONFIGS)
 
-
-# pip install --upgrade pip
-# pip install "torch>=2.2" torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-# pip install transformers datasets scikit-learn matplotlib
