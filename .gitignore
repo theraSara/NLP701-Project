@@ -1,4 +1,4 @@
 data/
-.conda/
+.venv/
 models/
 output/

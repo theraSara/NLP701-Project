@@ -21,12 +21,12 @@ def write_dev_curve(output_dir, model_name, dataset_name, eval_logs):
     if not eval_logs:
         return
     csv_path = os.path.join(output_dir, "dev_curve.csv")
-    filednames = ['epoch', 'eval_accuracy', 'eval_f1', 'eval_precision', 'eval_recall', 'eval_loss']
+    fieldnames = ['epoch', 'eval_accuracy', 'eval_f1', 'eval_precision', 'eval_recall', 'eval_loss']
     with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, filednames=filednames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in eval_logs:
-            writer.writerow({k: row.get(k) for k in filednames})
+            writer.writerow({k: row.get(k) for k in fieldnames})
 
     # plot dev accuracy vs. epochs
     epochs = [r['epoch'] for r in eval_logs]

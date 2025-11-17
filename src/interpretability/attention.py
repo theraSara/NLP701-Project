@@ -457,9 +457,7 @@ def expand_models(templates, ds):
         out = {name: path.format(ds=ds) for name, path in templates.items()}
         return out
 
-
-if __name__ == "__main__":
-
+def main():
     DATASETS = {"imdb", "sst2"}
     
     SAMPLED_DATA = {
@@ -487,3 +485,6 @@ if __name__ == "__main__":
         )
 
     print("All datasets done")
+
+if __name__ == "__main__":
+    main()
