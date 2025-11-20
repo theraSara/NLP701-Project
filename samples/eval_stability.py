@@ -55,7 +55,7 @@ def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu", sav
 
         # 1. Get attention-based importance for original
         try:
-            _, base_scores, _ = get_importance_fn(text, tokenizer, model, device=device)
+            _, base_scores, raw_score = get_importance_fn(text, tokenizer, model, device=device)
         except Exception:
             continue
 
@@ -63,7 +63,7 @@ def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu", sav
         for r in ratios:
             shuffled_text = shuffle_tokens(text, r)
             try:
-                _, shuf_scores, _ = get_importance_fn(shuffled_text, tokenizer, model, device=device)
+                _, shuf_scores, shuf_raw = get_importance_fn(shuffled_text, tokenizer, model, device=device)
             except Exception:
                 continue
 
@@ -71,10 +71,8 @@ def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu", sav
             results_per_ratio[r].append(corr)
             details[str(sample_id)][f"{r:.2f}"] = {
                 "spearman": corr,
-                "base_score": base_scores,
-                "shuf_scores": shuf_scores,
-                "len_orig": len(base_scores),
-                "len_shuf": len(shuf_scores),
+                "orig_raw_score": raw_score,
+                "shuf_raw_score": shuf_raw,
             }
 
     # 3. Compute mean correlation per ratio
