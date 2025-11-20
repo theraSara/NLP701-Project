@@ -1,0 +1,16 @@
+p,suff_mean,model
+0.01,,TinyBERT
+0.05,,TinyBERT
+0.1,,TinyBERT
+0.2,,TinyBERT
+0.5,,TinyBERT
+0.01,,DistilBERT
+0.05,,DistilBERT
+0.1,,DistilBERT
+0.2,,DistilBERT
+0.5,,DistilBERT
+0.01,,ALBERT
+0.05,,ALBERT
+0.1,,ALBERT
+0.2,,ALBERT
+0.5,,ALBERT

@@ -1,0 +1,19 @@
+{
+  "by_id": {
+    "415": {
+      "text": "despite its title , punch-drunk love is never heavy-handed . ",
+      "label": 1,
+      "indices": 415
+    },
+    "408": {
+      "text": "manages to be both repulsively sadistic and mundane . ",
+      "label": 0,
+      "indices": 408
+    },
+    "1": {
+      "text": "my big fat greek wedding uses stereotypes in a delightful blend of sweet romance and lovingly dished out humor . ",
+      "label": 1,
+      "indices": 1
+    }
+  }
+}

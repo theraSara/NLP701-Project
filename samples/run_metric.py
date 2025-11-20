@@ -7,7 +7,7 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 from utils import set_seed, load_data, plot_stability, plot_comprehensiveness, plot_sufficiency
-from token_score import get_attention_score, get_lime_score, get_ig_score
+from token_score import get_attention_score, get_lime_score #, get_ig_score
 from eval_stability import stability
 from eval_faithfulness import comprehensiveness, sufficiency
 
@@ -67,8 +67,8 @@ def run_metric_over_all(
             # Standardize columns
             if metric_name == "stability":
                 df.rename(columns={"ratio": "p", "mean_spearman": "corr_spearman_mean"}, inplace=True)
-            # else:
-            #     df.rename(columns={"ratio": "p"}, inplace=True)
+            else:
+                df.rename(columns={"ratio": "p"}, inplace=True)
 
             df["model"] = model_name
             all_results.append(df)
@@ -170,44 +170,18 @@ def main(selected_methods: list[str] | None = None, output_dir: str = "results")
 if __name__ == "__main__":
     set_seed()
 
-    imdb_df = pd.read_csv("data/permutated100/sst2_shuffled_100.csv")[["texts","labels","indices"]]
-    sst2_df = pd.read_csv("data/permutated100/sst2_shuffled_100.csv")[["texts","labels","indices"]]
-
-    # imdb_path = 'sampled/imdb_sampled_500.pkl'
-    # sst2_path = 'sampled/sst2_sampled_436.pkl'
-
-    # n_samples = 1
-    # imdb_df = load_data(imdb_path).iloc[:n_samples]
-    # sst2_df = load_data(sst2_path).iloc[:n_samples]
+    imdb_df = pd.read_csv("data/sst2_shuffled_100.csv")[["texts","labels","indices"]].iloc[:3]
+    sst2_df = pd.read_csv("data/sst2_shuffled_100.csv")[["texts","labels","indices"]].iloc[:3]
 
     RATIOS = [0.01, 0.05, 0.10, 0.20, 0.50]
-
-    # datasets: Dict[str, Dict] = {
-    #     "SST2": {
-    #         "data": sst2_df,
-    #         "models": {
-    #             "TinyBERT": r"D:/master/NLP/models/tinybert_sst2/final",
-    #             "DistilBERT": r"D:/master/NLP/models/distilbert_sst2/final",
-    #             "ALBERT": r"D:/master/NLP/models/albert_sst2/final",
-    #         },
-    #     },
-    #     "IMDB": {
-    #         "data": imdb_df,
-    #         "models": {
-    #             "TinyBERT": r"D:/master/NLP/models/tinybert_imdb/final",
-    #             "DistilBERT": r"D:/master/NLP/models/distilbert_imdb/final",
-    #             "ALBERT": r"D:/master/NLP/models/albert_imdb/final",
-    #         },
-    #     },
-    # }
 
     datasets: Dict[str, Dict] = {
         "SST2": {
             "data": sst2_df,
             "models": {
-                "TinyBERT": "./models/tinybert_sst2/final",
-                "DistilBERT": "./models/distilbert_sst2/final",
-                "ALBERT": "./models/albert_sst2/final",
+                "TinyBERT": "models/tinybert_sst2/final",
+                "DistilBERT": "models/distilbert_sst2/final",
+                "ALBERT": "models/albert_sst2/final",
             },
         },
         "IMDB": {
@@ -223,8 +197,8 @@ if __name__ == "__main__":
 
     METHODS: Dict[str, Dict[str, Callable]] = {
         "attention": {"label": "Attention", "fn": get_attention_score},
-        "lime": {"label": "LIME", "fn": get_lime_score},
-        "ig": {"label": "Grad", "fn": get_ig_score},
+        # "lime": {"label": "LIME", "fn": get_lime_score},
+        # "ig": {"label": "Grad", "fn": get_ig_score},
     }
 
     methods = sys.argv[1:] if len(sys.argv) > 1 else None

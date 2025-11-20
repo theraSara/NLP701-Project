@@ -8,26 +8,27 @@ from pathlib import Path
 
 
 # --- helper: shuffle tokens with a given ratio ---
-def shuffle_tokens(text: str, ratio: float) -> str:
-    """
-    Randomly shuffle a given ratio of tokens in the text.
-    """
-    tokens = text.split()
-    n = len(tokens)
-    k = int(ratio * n)
-    if k < 2:
-        return text  # nothing to shuffle
+# def shuffle_tokens(text: str, ratio: float) -> str:
+#     """
+#     Randomly shuffle a given ratio of tokens in the text.
+#     """
+#     tokens = text.split()
+#     n = len(tokens)
+#     k = int(ratio * n)
+#     if k < 2:
+#         return text  # nothing to shuffle
 
-    idxs = list(range(n))
-    shuffle_idxs = random.sample(idxs, k)
-    shuffled_part = [tokens[i] for i in shuffle_idxs]
-    random.shuffle(shuffled_part)
-    for i, j in enumerate(shuffle_idxs):
-        tokens[j] = shuffled_part[i]
+#     idxs = list(range(n))
+#     shuffle_idxs = random.sample(idxs, k)
+#     shuffled_part = [tokens[i] for i in shuffle_idxs]
+#     random.shuffle(shuffled_part)
+#     for i, j in enumerate(shuffle_idxs):
+#         tokens[j] = shuffled_part[i]
 
-    return " ".join(tokens)
+#     return " ".join(tokens)
 
 # --- helper: compute stability (Spearman) between two vectors ---
+
 def spearman_stability(scores1, scores2):
     # pad shorter one if tokenization length changes
     m = min(len(scores1), len(scores2))
@@ -49,21 +50,21 @@ def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu", sav
         sample_id = row.get("indices", i)
         details[str(sample_id)] = {
             "text": text,
-            "label": row.get("label", None),
+            "label": row.get("labels", None),
             "indices": sample_id
         }
 
         # 1. Get attention-based importance for original
         try:
-            _, base_scores, raw_score = get_importance_fn(text, tokenizer, model, device=device)
+            _, base_scores, raw_score, raw_tokens = get_importance_fn(text, tokenizer, model, device=device)
         except Exception:
             continue
 
         # 2. For each ratio, create shuffled version and compare
         for r in ratios:
-            shuffled_text = shuffle_tokens(text, r)
+            shuffled_text = row[f"{r}"]
             try:
-                _, shuf_scores, shuf_raw = get_importance_fn(shuffled_text, tokenizer, model, device=device)
+                _, shuf_scores, shuf_raw, _ = get_importance_fn(shuffled_text, tokenizer, model, device=device)
             except Exception:
                 continue
 
@@ -71,6 +72,7 @@ def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu", sav
             results_per_ratio[r].append(corr)
             details[str(sample_id)][f"{r:.2f}"] = {
                 "spearman": corr,
+                "raw_tokens": raw_tokens,
                 "orig_raw_score": raw_score,
                 "shuf_raw_score": shuf_raw,
             }

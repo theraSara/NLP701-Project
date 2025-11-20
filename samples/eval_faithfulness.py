@@ -15,12 +15,12 @@ def comprehensiveness(df, tokenizer, model, get_importance_fn, ratios, device="c
     results = {r: [] for r in ratios}
     n_samples = len(df)
 
-    for i, row in tqdm(df.iterrows(), total=n_samples):
+    for _, row in tqdm(df.iterrows(), total=n_samples):
         text = row["texts"]
 
         # importance on original
         try:
-            tokens, scores = get_importance_fn(text, tokenizer, model, device=device)
+            tokens, scores, _, _ = get_importance_fn(text, tokenizer, model, device=device)
         except Exception:
             continue
 
@@ -35,23 +35,20 @@ def comprehensiveness(df, tokenizer, model, get_importance_fn, ratios, device="c
             continue
 
         # rank tokens once
-        seq_len = len(tokens)
-        ignore_tokens = {"[CLS]", "[SEP]"}
-        valid_idxs = [i for i, tok in enumerate(tokens) if tok not in ignore_tokens]
-        ranked = sorted(valid_idxs, key=lambda i: scores[i], reverse=True)
+        order = np.argsort(-np.asarray(scores, dtype=float))
 
         # per-ratio delete and re-score
         for r in ratios:
             try:
-                k = max(1, int(r * seq_len))
-                to_remove = set(ranked[:k])
-                kept_tokens = [tokens[i] for i in range(seq_len) if i not in to_remove]
+                k = max(1, min(int(round(r * n)), n))
+                to_remove = set(order[:k])
+
+                kept_tokens = [tok for i, tok in enumerate(tokens) if i not in to_remove]
                 new_text = tokenizer.convert_tokens_to_string(kept_tokens)
 
-                new_inputs = tokenizer(new_text, return_tensors="pt", truncation=True, max_length=max_length).to(device)
-                new_logits = model(**new_inputs).logits
-                new_probs = softmax(new_logits, dim=-1)
-                conf_new = new_probs[0, pred].item()
+                new_enc = tokenizer(new_text, return_tensors="pt", truncation=True, max_length=max_length).to(device)
+                new_probs = softmax(model(**new_enc).logits, dim=-1)
+                conf_new = float(new_probs[0, pred].item())
 
                 comp = conf_orig - conf_new
                 results[r].append(comp)
@@ -77,7 +74,7 @@ def sufficiency(df, tokenizer, model, get_importance_fn, ratios, device="cpu", m
 
         # 1. Get token importance
         try:
-            tokens, scores = get_importance_fn(text, tokenizer, model, device=device)
+            tokens, scores, _, _ = get_importance_fn(text, tokenizer, model, device=device)
         except Exception:
             continue
 
@@ -91,24 +88,20 @@ def sufficiency(df, tokenizer, model, get_importance_fn, ratios, device="cpu", m
         except Exception:
             continue
 
-        # 3. Pre-rank tokens (ignore special tokens)
-        seq_len = len(tokens)
-        ignore_tokens = {"[CLS]", "[SEP]"}
-        valid_idxs = [i for i, tok in enumerate(tokens) if tok not in ignore_tokens]
-        ranked = sorted(valid_idxs, key=lambda i: scores[i], reverse=True)
+        order = np.argsort(-np.asarray(scores, dtype=float))
 
         # 4. Evaluate sufficiency at each ratio
         for r in ratios:
             try:
-                k = max(1, int(r * seq_len))
-                to_keep = set(ranked[:k])
-                kept_tokens = [tokens[i] for i in range(seq_len) if i in to_keep or tokens[i] in ignore_tokens]
+                k = max(1, min(int(round(r * n)), n))
+                to_keep = set(order[:k])
+
+                kept_tokens = [tok for i, tok in enumerate(tokens) if i in to_keep]
                 new_text = tokenizer.convert_tokens_to_string(kept_tokens)
 
-                new_inputs = tokenizer(new_text, return_tensors="pt", truncation=True, max_length=max_length).to(device)
-                new_logits = model(**new_inputs).logits
-                new_probs = softmax(new_logits, dim=-1)
-                conf_new = new_probs[0, pred].item()
+                new_enc = tokenizer(new_text, return_tensors="pt", truncation=True, max_length=max_length).to(device)
+                new_probs = softmax(model(**new_enc).logits, dim=-1)
+                conf_new = float(new_probs[0, pred].item()) 
 
                 # Sufficiency = confidence drop when only top-k tokens are kept
                 suff = conf_orig - conf_new
