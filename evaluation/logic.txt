@@ -1,0 +1,23 @@
+1. Faithfulness Logic: (method-agnostic)
+- Comprehensiveness = p(x) - p(x x_{top q%})
+    * larger drop is better
+- Sufficiency = p(x) - p(x_{top q%})
+    * smaller drop is better
+
+* Apply equally to Attention/IG/LIME/SHAP, as long as they all have the 
+(tokens, importances).
+
+2. Stability Logic: (method-agnostic)
+- Spearman correlation between the original attribution vector and the
+vector from the shuffled text at each ratio (shuf_010, shuf_050, etc.)
+    * measures how sensitive a method's explanations are to word order/random
+    shuffles.
+    * lower correlation at higher shuffle = more sensitive to strucutre (expected)
+* Apply equally to Attention/IG/LIME/SHAP, as long as they all have the 
+(tokens, importances).
+
+
+
+NOTE: 
+- Faithfulness doesn’t need the permuted columns, only texts (original).
+- Stability does need the permuted columns, so both permuted and text columns.
