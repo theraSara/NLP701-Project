@@ -86,7 +86,7 @@ def build(args):
         by_id[str(sample_id)] = {}
         for col in shuf_cols:
             text_p = str(row[col])
-            enc = tokenizer(text_p, return_tensors="pt", truncation=True, max_length=512).to(device)
+            enc = tokenizer(text_p, return_tensors="pt", truncation=True, max_length=256).to(device)
             input_ids = enc["input_ids"]; attn_mask = enc["attention_mask"]
             token_type_ids = enc.get("token_type_ids", None)
 
@@ -108,24 +108,25 @@ def build(args):
             baseline = torch.tensor([baseline_ids], device=device)
 
             if need_tti and token_type_ids is not None:
-                atts, _ = lig.attribute(
+                atts = lig.attribute(
                     inputs=input_ids,
                     baselines=baseline,
                     additional_forward_args=(attn_mask, token_type_ids),
                     target=pred_idx,
                     n_steps=args.ig_steps,
                     internal_batch_size=args.internal_bs,
-                    return_convergence_delta=True
+                    return_convergence_delta=False
                 )
+                
             else:
-                atts, _ = lig.attribute(
+                atts = lig.attribute(
                     inputs=input_ids,
                     baselines=baseline,
                     additional_forward_args=(attn_mask,),
                     target=pred_idx,
                     n_steps=args.ig_steps,
                     internal_batch_size=args.internal_bs,
-                    return_convergence_delta=True
+                    return_convergence_delta=False
                 )
 
             token_scores = atts.sum(dim=-1).squeeze(0).detach().cpu().tolist()
@@ -153,7 +154,7 @@ if __name__ == "__main__":
     ap.add_argument("--model_path", required=True)
     ap.add_argument("--csv_path", required=True)
     ap.add_argument("--output_dir", required=True)
-    ap.add_argument("--ig_steps", type=int, default=50)
+    ap.add_argument("--ig_steps", type=int, default=16)
     ap.add_argument("--internal_bs", type=int, default=None)
     args = ap.parse_args()
     build(args)
