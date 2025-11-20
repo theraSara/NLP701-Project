@@ -16,10 +16,11 @@ def load_data(data_path):
         df = pd.DataFrame(samples)
         return df 
     
-def plot_stability(combined_df, RATIOS, title):
+def plot_stability(combined_df, RATIOS, out_dir, method_label, dataset_name):
     df = combined_df.copy()
     df["p"] = pd.to_numeric(df["p"], errors="coerce")
     df = df.dropna(subset=["p"]).sort_values(["model", "p"])
+    title = f"{method_label} score - {dataset_name}"
 
     plt.figure(figsize=(6, 4))
     for model in df["model"].unique():
@@ -36,12 +37,12 @@ def plot_stability(combined_df, RATIOS, title):
     plt.ylim()
     plt.tight_layout()
     
-    save_path = f"eval_plot/{title}_stability.png"
+    save_path = out_dir / f"{dataset_name}_stability_{method_label}.png"
     plt.savefig(save_path)
     print(f"Figure saved to {save_path}")
-    plt.show()
+    # plt.show()
 
-def plot_comprehensiveness(combined_df, RATIOS, title):
+def plot_comprehensiveness(combined_df, RATIOS, out_dir, method_label, dataset_name):
     """
     Plot Comprehensiveness (confidence drop) for multiple models.
     Expected columns: ['model', 'p', 'comp_mean']
@@ -49,13 +50,14 @@ def plot_comprehensiveness(combined_df, RATIOS, title):
     df = combined_df.copy()
     df["p"] = pd.to_numeric(df["p"], errors="coerce")
     df = df.dropna(subset=["p"]).sort_values(["model", "p"])
+    title = f"{method_label} score - {dataset_name}"
 
     plt.figure(figsize=(6, 4))
     for model in df["model"].unique():
         sub = df[df["model"] == model]
         plt.plot(sub["p"] * 100, sub["comp_mean"], marker="o", label=model)
 
-    plt.title(f"{title}")
+    plt.title(title)
     plt.xlabel("Removed ratio (%)")
     plt.ylabel("Comprehensiveness")
     plt.legend()
@@ -64,12 +66,12 @@ def plot_comprehensiveness(combined_df, RATIOS, title):
     plt.xticks([r * 100 for r in RATIOS], [int(r * 100) for r in RATIOS])
     plt.tight_layout()
     
-    save_path = f"eval_plot/{title}_comprehensiveness.png"
+    save_path = out_dir / f"{dataset_name}_comprehensiveness_{method_label}.png"
     plt.savefig(save_path)
     print(f"Figure saved to {save_path}")
-    plt.show()
+    # plt.show()
 
-def plot_sufficiency(combined_df, RATIOS, title):
+def plot_sufficiency(combined_df, RATIOS, out_dir, method_label, dataset_name):
     """
     Plot Sufficiency (confidence retention) for multiple models.
     Expected columns: ['model', 'p', 'suff_mean']
@@ -77,13 +79,14 @@ def plot_sufficiency(combined_df, RATIOS, title):
     df = combined_df.copy()
     df["p"] = pd.to_numeric(df["p"], errors="coerce")
     df = df.dropna(subset=["p"]).sort_values(["model", "p"])
+    title = f"{method_label} score - {dataset_name}"
 
     plt.figure(figsize=(6, 4))
     for model in df["model"].unique():
         sub = df[df["model"] == model]
         plt.plot(sub["p"] * 100, sub["suff_mean"], marker="o", label=model)
 
-    plt.title(f"{title}")
+    plt.title(title)
     plt.xlabel("Kept ratio (%)")
     plt.ylabel("Sufficiency")
     plt.legend()
@@ -92,7 +95,7 @@ def plot_sufficiency(combined_df, RATIOS, title):
     plt.xticks([r * 100 for r in RATIOS], [int(r * 100) for r in RATIOS])
     plt.tight_layout()
     
-    save_path = f"eval_plot/{title}_sufficiency.png"
+    save_path = out_dir / f"{dataset_name}_sufficiency_{method_label}.png"
     plt.savefig(save_path)
     print(f"Figure saved to {save_path}")
-    plt.show()
+    # plt.show()
