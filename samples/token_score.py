@@ -9,8 +9,17 @@ from typing import Iterable, Dict, Optional, Tuple, List
 
 from lime.lime_text import LimeTextExplainer
 from captum.attr import LayerIntegratedGradients
+import shap
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def normalize(scores):
+    scores = np.array(scores, dtype=float)
+    # absolute 
+    scores = np.abs(scores)
+    # l1
+    scores = scores / (scores.sum() + 1e-12)
+    return scores
 
 # === ATTENTION METHOD ===
 @torch.no_grad()
@@ -61,12 +70,13 @@ def get_attention_score(
 
     # CLS → token row
     cls_row = att[cls_pos, :seq_len]
-    scores = (cls_row / (cls_row.sum() + 1e-12)).tolist()
+    scores = cls_row.tolist()
+    normalized_scores = normalize(cls_row).tolist()
 
     # tokens
     tokens = tokenizer.convert_ids_to_tokens(input_ids[:seq_len])
 
-    return tokens, scores
+    return tokens, normalized_scores, scores
 
 #############################################################################################################
 
@@ -88,13 +98,7 @@ def get_lime_score(
     max_length=256,
     num_samples=100,
     num_features=None,
-    random_state=42,
-    use_abs=True,
-    l1_normalize=True,
-):
-    """
-    Returns (tokens_without_spaces, scores) aligned to LIME's *non-space* tokens.
-    """
+    random_state=42):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
 
@@ -113,48 +117,34 @@ def get_lime_score(
         num_samples=num_samples,
     )
 
-    # ---- raw tokens from LIME (may include spaces) ----
     dm = exp.domain_mapper
     idx_str = getattr(dm, "indexed_string", None)
     if idx_str is None:
-        # fallback: use as_list; this returns only selected features, not full vector
         pairs = exp.as_list(label=target_label)
         toks = [t for t, _ in pairs]
-        vals = [abs(w) if use_abs else float(w) for _, w in pairs]
-        if l1_normalize and sum(vals) > 0:
-            s = sum(vals); vals = [v/s for v in vals]
-        return toks, vals
+        vals = [w for _, w in pairs]
+        scores = normalize(vals)  
+        return toks, scores.tolist()
 
-    raw = idx_str.as_list if isinstance(getattr(idx_str, "as_list", None), list) else idx_str.as_list()
-    raw_tokens = list(raw)
-
-    # ---- map non-space feature indices -> raw token indices ----
-    nonspace_to_raw = []
-    for i, tok in enumerate(raw_tokens):
-        if not tok.isspace():
-            nonspace_to_raw.append(i)
-
-    # ---- LIME weights are given over non-space token indices ----
-    index_weights = dict(exp.as_map()[target_label])  # {nonspace_idx: weight}
+    raw_tokens = list(idx_str.as_list() if callable(getattr(idx_str, "as_list", None))
+                      else idx_str.as_list)
+    index_weights = dict(exp.as_map()[target_label])
     raw_scores = np.zeros(len(raw_tokens), dtype=float)
+
+    nonspace_to_raw = [i for i, t in enumerate(raw_tokens) if not t.isspace()]
     for nz_idx, w in index_weights.items():
         if 0 <= nz_idx < len(nonspace_to_raw):
             raw_idx = nonspace_to_raw[nz_idx]
-            raw_scores[raw_idx] = abs(w) if use_abs else float(w)
+            raw_scores[raw_idx] = w
 
-    # ---- drop space tokens; keep only real tokens ----
     tokens, scores = [], []
     for tok, sc in zip(raw_tokens, raw_scores):
         if not tok.isspace():
             tokens.append(tok)
-            scores.append(float(sc))
-
-    # optional L1 normalization
-    if l1_normalize:
-        s = sum(scores)
-        if s > 0:
-            scores = [v / s for v in scores]
-    return tokens, scores
+            scores.append(sc)
+    
+    normalized_scores = normalize(scores).tolist()
+    return tokens, normalized_scores, scores.tolist(),
 
 #############################################################################################################
 
@@ -256,30 +246,38 @@ def get_ig_score(
     lig = build_lig(model, tokenizer, use_token_type)
 
     tokens = tokenizer.convert_ids_to_tokens(input_ids[0][:seq_len])  # fallback
-
+    
+    scores_list = []
     try:
-        if use_token_type:
-            atts = lig.attribute(
-                inputs=input_ids,
-                baselines=baseline,
-                additional_forward_args=(attention_mask, token_type_ids),
-                target=target_idx,
-                n_steps=n_steps,
-                internal_batch_size=internal_batch_size,
-                return_convergence_delta=False,
-            )
-        else:
-            atts = lig.attribute(
-                inputs=input_ids,
-                baselines=baseline,
-                additional_forward_args=(attention_mask,),
-                target=target_idx,
-                n_steps=n_steps,
-                internal_batch_size=internal_batch_size,
-                return_convergence_delta=False,
-            )
-        scores_raw = atts.sum(dim=-1).squeeze(0)[:seq_len].detach().cpu().numpy()
-        scores_proc = np.abs(scores_raw)
+        for i in range(len(target_idx)):
+            if use_token_type:
+                atts = lig.attribute(
+                    inputs=input_ids,
+                    baselines=baseline,
+                    additional_forward_args=(attention_mask, token_type_ids),
+                    target=target_idx,
+                    n_steps=n_steps,
+                    internal_batch_size=internal_batch_size,
+                    return_convergence_delta=False,
+                )
+            else:
+                atts = lig.attribute(
+                    inputs=input_ids,
+                    baselines=baseline,
+                    additional_forward_args=(attention_mask,),
+                    target=target_idx,
+                    n_steps=n_steps,
+                    internal_batch_size=internal_batch_size,
+                    return_convergence_delta=False,
+                )
+            scores_raw = atts.sum(dim=-1).squeeze(0)[:int(attention_mask[i].sum())].detach().cpu().numpy()
+            scores_proc = np.abs(scores_raw) if use_abs else scores_raw.copy()
+            if l1_normalize:
+                s = np.sum(scores_proc)
+                if s > 0:
+                    scores_proc = scores_proc / s
+            scores_list.append((tokens, scores_proc.tolist(), scores_raw.tolist()))
+
     except Exception as e:
         print(f"Attribution failed: {e}")
         scores_raw = np.zeros(len(tokens))
@@ -316,5 +314,82 @@ get_ig_score._needs_grad = True
 ## === SHAP METHOD ===
 
 @torch.no_grad()
-def get_shap_score():
+def _predict_proba_np(texts, tokenizer, model, device=device, max_length=256):
+    """
+    texts: list[str] -> np.ndarray of probs (N, C)
+    Safe wrapper used by SHAP for batching.
+    """
+    enc = tokenizer(
+        list(texts),
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+        max_length=max_length
+    ).to(device)
+    logits = model(**enc).logits
+    return torch.softmax(logits, dim=-1).cpu().numpy()
+
+def get_shap_score(
+    text,
+    tokenizer,
+    model,
+    device,
+    max_length=256,
+    max_evals=100,
+    use_abs=True,
+    l1_normalize=True
+):
+    model.to(device).eval()
+
+    # get the predictions class
+    base = _predict_proba_np([text], tokenizer, model)
+
+    def predict_proba_shap(texts):
+        # SHAP needs a list of texts to get the probabilities
+        if isinstance(texts, np.ndarray):
+            texts = texts.tolist()
+
+        # handle the empty or single strings
+        if isinstance(texts, str):
+            texts = [texts]
+
+        # tokenize batch
+        inputs = tokenizer(
+            texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=max_length
+        ).to(device)
+
+        # get predictions
+        with torch.no_grad():
+            logits = model(**inputs).logits
+            probs = softmax(logits, dim=-1)
+
+        return probs.cpu().numpy()
+    
+    # SHAP explainer (tokenizer as the masker)
+    explainer = shap.Explainer(predict_proba_shap, tokenizer)
+
+    # generate SHAP values
+    try:
+        shap_values = explainer(
+            [text],
+            max_evals=max_evals,
+            silent=True 
+        )
+    except Exception as e: 
+        print(f"SHAP failed: {e}")
+        inputs = tokenizer(
+            text, 
+            return_tensors="pt", 
+            truncation=True, 
+            max_length=max_length
+        )
+        tokens = tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])
+
+
+
+
     return None
