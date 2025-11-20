@@ -7,7 +7,7 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 from utils import set_seed, load_data, plot_stability, plot_comprehensiveness, plot_sufficiency
-from token_score import get_attention_score, get_lime_score
+from token_score import get_attention_score, get_lime_score, load_stability_json, load_faithfulness_json
 from eval_stability import stability
 from eval_faithfulness import comprehensiveness, sufficiency
 
@@ -124,39 +124,89 @@ def main(selected_methods: list[str] | None = None, output_dir: str = "results")
 if __name__ == "__main__":
     set_seed()
 
-    imdb_path = 'sampled/imdb_sampled_500.pkl'
-    sst2_path = 'sampled/sst2_sampled_436.pkl'
+    # imdb_path = 'sampled/imdb_sampled_500.pkl'
+    # sst2_path = 'sampled/sst2_sampled_436.pkl'
 
-    n_samples = 1
-    imdb_df = load_data(imdb_path).iloc[:n_samples]
-    sst2_df = load_data(sst2_path).iloc[:n_samples]
+    # n_samples = 1
+    # imdb_df = load_data(imdb_path).iloc[:n_samples]
+    # sst2_df = load_data(sst2_path).iloc[:n_samples]
 
-    RATIOS = [0.1, 0.2, 0.3, 0.4, 0.5]
+    RATIOS = [0.01, 0.05, 0.10, 0.20, 0.50]
 
-    datasets: Dict[str, Dict] = {
-        "SST2": {
-            "data": sst2_df,
-            "models": {
-                "TinyBERT": r"D:/master/NLP/models/tinybert_sst2/final",
-                "DistilBERT": r"D:/master/NLP/models/distilbert_sst2/final",
-                "ALBERT": r"D:/master/NLP/models/albert_sst2/final",
-            },
-        },
-        "IMDB": {
-            "data": imdb_df,
-            "models": {
-                "TinyBERT": r"D:/master/NLP/models/tinybert_imdb/final",
-                "DistilBERT": r"D:/master/NLP/models/distilbert_imdb/final",
-                "ALBERT": r"D:/master/NLP/models/albert_imdb/final",
-            },
-        },
-    }
+    # datasets: Dict[str, Dict] = {
+    #     "SST2": {
+    #         "data": sst2_df,
+    #         "models": {
+    #             "TinyBERT": r"D:/master/NLP/models/tinybert_sst2/final",
+    #             "DistilBERT": r"D:/master/NLP/models/distilbert_sst2/final",
+    #             "ALBERT": r"D:/master/NLP/models/albert_sst2/final",
+    #         },
+    #     },
+    #     "IMDB": {
+    #         "data": imdb_df,
+    #         "models": {
+    #             "TinyBERT": r"D:/master/NLP/models/tinybert_imdb/final",
+    #             "DistilBERT": r"D:/master/NLP/models/distilbert_imdb/final",
+    #             "ALBERT": r"D:/master/NLP/models/albert_imdb/final",
+    #         },
+    #     },
+    # }
+    
+    dataset_name = "SST"
+    out_dir = "results"
 
-    METHODS: Dict[str, Dict[str, Callable]] = {
-        "attention": {"label": "Attention", "fn": get_attention_score},
-        "lime": {"label": "LIME", "fn": get_lime_score},
-        # "grad": {"label": "Grad", "fn": get_grad_score},
-    }
+    if dataset_name == "SST2":
+        runs = {
+            "DistilBERT": "ig_outputs/sst2_distilbert",
+            "TinyBERT":   "ig_outputs/sst2_tinybert",
+            "ALBERT":     "ig_outputs/sst2_albert",
+        }
+    else:
+        runs = {
+            "DistilBERT": "ig_outputs/imdb_distilbert",
+            "TinyBERT":   "ig_outputs/imdb_tinybert",
+            "ALBERT":     "ig_outputs/imdb_albert",
+        }
+        
+    comp_dfs, suff_dfs, stab_dfs = [], [], []
+    for model_name, base in runs.items():
+        comp_df, suff_df = load_faithfulness_json(
+            f"{base}/faithfulness_scores.json", model_name
+        )
+        stab_df = load_stability_json(
+            f"{base}/stability_scores.json", model_name
+        )
+        comp_dfs.append(comp_df)
+        suff_dfs.append(suff_df)
+        stab_dfs.append(stab_df)
 
-    methods = sys.argv[1:] if len(sys.argv) > 1 else None
-    main(methods)
+    comp_all = pd.concat(comp_dfs, ignore_index=True)
+    suff_all = pd.concat(suff_dfs, ignore_index=True)
+    stab_all = pd.concat(stab_dfs, ignore_index=True)
+
+    plot_comprehensiveness(
+        comp_all, RATIOS, out_dir,
+        method_label="Integrated Gradients",
+        dataset_name=dataset_name
+    )
+
+    plot_sufficiency(
+        suff_all, RATIOS, out_dir,
+        method_label="Integrated Gradients",
+        dataset_name=dataset_name
+    )
+
+    plot_stability(
+        stab_all, RATIOS, out_dir,
+        method_label="Integrated Gradients",
+        dataset_name=dataset_name
+    )
+
+    # METHODS: Dict[str, Dict[str, Callable]] = {
+    #     "attention": {"label": "Attention", "fn": get_attention_score},
+    #     "lime": {"label": "LIME", "fn": get_lime_score},
+    #     # "ig": {"label": "Grad", "fn": get_grad_score},
+    # }
+
+    #methods = sys.argv[1:] if len(sys.argv) > 1 else None
+    #main(methods)
