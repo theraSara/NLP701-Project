@@ -49,7 +49,7 @@ def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu"):
 
         # 1. Get attention-based importance for original
         try:
-            tokens, orig_scores = get_importance_fn(text, tokenizer, model, device=device)
+            tokens, orig_scores, raw_scores = get_importance_fn(text, tokenizer, model, device=device)
         except Exception:
             continue
 
@@ -57,7 +57,7 @@ def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu"):
         for r in ratios:
             shuffled_text = shuffle_tokens(text, r)
             try:
-                _, shuf_scores = get_importance_fn(shuffled_text, tokenizer, model, device=device)
+                _, shuf_scores, _ = get_importance_fn(shuffled_text, tokenizer, model, device=device)
             except Exception:
                 continue
             corr = spearman_stability(orig_scores, shuf_scores)

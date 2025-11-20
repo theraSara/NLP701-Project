@@ -1,11 +1,17 @@
-import torch 
-from torch.nn.functional import softmax
+import json
+import pandas as pd
 import numpy as np 
 
+import torch
+from torch.nn.functional import softmax
 
 from typing import Iterable, Dict, Optional, Tuple, List
-from lime.lime_text import LimeTextExplainer
 
+from lime.lime_text import LimeTextExplainer
+from captum.attr import LayerIntegratedGradients
+
+
+# === ATTENTION METHOD ===
 @torch.no_grad()
 def get_attention_score(
     text: str,
@@ -63,7 +69,7 @@ def get_attention_score(
 
 #############################################################################################################
 
-
+## === LIME METHOD ===
 @torch.no_grad()
 def _predict_proba(texts, tokenizer, model, device="cpu", max_length=512):
     enc = tokenizer(list(texts),
@@ -77,9 +83,9 @@ def get_lime_score(
     text,
     tokenizer,
     model,
-    device="cpu",
-    max_length=512,
-    num_samples=1000,
+    device=device,
+    max_length=256,
+    num_samples=100,
     num_features=None,
     random_state=42,
     use_abs=True,
@@ -88,6 +94,7 @@ def get_lime_score(
     """
     Returns (tokens_without_spaces, scores) aligned to LIME's *non-space* tokens.
     """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device).eval()
 
     base = _predict_proba([text], tokenizer, model, device, max_length)[0]
@@ -146,6 +153,34 @@ def get_lime_score(
         s = sum(scores)
         if s > 0:
             scores = [v / s for v in scores]
-
     return tokens, scores
 
+#############################################################################################################
+
+## === INTEGRATED GRADIENTS METHOD ===
+
+@torch.no_grad()
+def get_ig_score(
+    text,
+    tokenizer,
+    model,
+    device=device,
+    max_length=256,
+    num_samples=100,
+    num_features=None,
+    random_state=42,
+    use_abs=True,
+    l1_normalize=True,
+    ):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    return tokens, scores, 
+
+
+#############################################################################################################
+
+## === SHAP METHOD ===
+
+@torch.no_grad()
+def get_shap_score():
+    return None
