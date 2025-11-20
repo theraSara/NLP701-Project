@@ -179,7 +179,6 @@ class FaithfulnessEvaluator(BaseEvaluator):
             if not np.isnan(suff_auc_norm): 
                 suff_auc_norm_vals.append(suff_auc_norm)
 
-
         def summarize(bucket):
             out = {}
             for r in self.ratios:

@@ -17,12 +17,12 @@ def run_with_config(config):
     # model_name = config.get("model_name") or config.get("model_path")
     dataset_name = config.get("dataset_name")
     # dataset_config = config.get("dataset_config", None)
-    # dataset_split = config.get("dataset_split", "validation")
+    max_length = config.get("max_length", 256)
     random_samples = config.get("random_samples", False)
     output_dir = config.get("output_dir", "IG_outputs")
     output_format = config.get("output_format", "json")
-    ig_steps = config.get("ig_steps", 50)
-    internal_bs = config.get("internal_batch_size", None)
+    ig_steps = config.get("ig_steps", 16)
+    internal_bs = config.get("internal_batch_size", 4)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs(output_dir, exist_ok=True)
@@ -60,7 +60,7 @@ def run_with_config(config):
             raise RuntimeError("Couldn't find embeddings layer in the model.")
 
     # detect whether token_type_ids are needed
-    use_token_type = 'token_type_ids' in AutoTokenizer.from_pretrained(model_path)("test", return_tensors='pt')
+    use_token_type = 'token_type_ids' in tokenizer("test", return_tensors='pt')
 
     # forward
     if use_token_type:
@@ -76,7 +76,7 @@ def run_with_config(config):
 
     results = []
     for count, (text, true_label, sample_id) in enumerate(data, 1):
-        enc = AutoTokenizer.from_pretrained(model_path)(text, return_tensors='pt', truncation=True, max_length=512).to(device)
+        enc = tokenizer(text, return_tensors='pt', truncation=True, max_length=max_length).to(device)
         input_ids_tensor = enc['input_ids']
         attention_mask_tensor = enc['attention_mask']
         token_type_ids_tensor = enc.get('token_type_ids', None)
@@ -125,22 +125,22 @@ def run_with_config(config):
         token_scores = attributions.sum(dim=-1).squeeze(0).detach().cpu().tolist()
         tokens = tokenizer.convert_ids_to_tokens(input_ids_list)
 
-        # HTML viz
-        viz_keep = {tokenizer.cls_token, tokenizer.sep_token, tokenizer.pad_token, '[CLS]', '[SEP]', '[PAD]'}
-        html_content = visualize_attributions_html(
-            [t for t in tokens if t not in viz_keep],
-            [a for t, a in zip(tokens, token_scores) if t not in viz_keep],
-            pred_label=str(target_idx),
-            pred_score=pred_score,
-            true_label=str(true_label),
-            sample_id=sample_id
-        )
+        # # HTML viz
+        # viz_keep = {tokenizer.cls_token, tokenizer.sep_token, tokenizer.pad_token, '[CLS]', '[SEP]', '[PAD]'}
+        # html_content = visualize_attributions_html(
+        #     [t for t in tokens if t not in viz_keep],
+        #     [a for t, a in zip(tokens, token_scores) if t not in viz_keep],
+        #     pred_label=str(target_idx),
+        #     pred_score=pred_score,
+        #     true_label=str(true_label),
+        #     sample_id=sample_id
+        # )
 
-        html_file = os.path.join(output_dir, f"sample_{sample_id}_attribution.html")
-        with open(html_file, 'w', encoding='utf-8') as f:
-            f.write("<html><head><meta charset='UTF-8'></head><body>\n")
-            f.write(html_content)
-            f.write("</body></html>")
+        # html_file = os.path.join(output_dir, f"sample_{sample_id}_attribution.html")
+        # with open(html_file, 'w', encoding='utf-8') as f:
+        #     f.write("<html><head><meta charset='UTF-8'></head><body>\n")
+        #     f.write(html_content)
+        #     f.write("</body></html>")
 
         results.append({
             "sample_id": sample_id,
@@ -175,7 +175,7 @@ def run_with_config(config):
     eval_config = config.get("evaluation_config", {})
 
     def predict_prob_for_label(text, label_id):
-        enc = tokenizer(text, return_tensors="pt", truncation=True, max_length=512).to(device)
+        enc = tokenizer(text, return_tensors="pt", truncation=True, max_length=max_length).to(device)
         with torch.no_grad():
             probs = torch.softmax(model(**enc).logits, dim=-1)
             return float(probs[0, label_id].item())
