@@ -67,8 +67,8 @@ def run_metric_over_all(
             # Standardize columns
             if metric_name == "stability":
                 df.rename(columns={"ratio": "p", "mean_spearman": "corr_spearman_mean"}, inplace=True)
-            else:
-                df.rename(columns={"ratio": "p"}, inplace=True)
+            # else:
+            #     df.rename(columns={"ratio": "p"}, inplace=True)
 
             df["model"] = model_name
             all_results.append(df)
