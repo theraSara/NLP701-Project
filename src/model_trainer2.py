@@ -194,8 +194,18 @@ class ModelTrainer:
     
 SUMMARY_CSV = './models/summary.csv'
 TRAINING_CONFIGS = [
-    #{'model':'distilbert-base-uncased','dataset':'sst2','output_dir':'./models/distilbert_sst2','batch_size':32},
-    #{'model':'distilbert-base-uncased','dataset':'imdb','output_dir':'./models/distilbert_imdb','batch_size':16},
+    {
+        'model':'distilbert-base-uncased',
+        'dataset':'sst2',
+        'output_dir':'./models/distilbert_sst2',
+        'batch_size':32
+    },
+    {
+        'model':'distilbert-base-uncased',
+        'dataset':'imdb',
+        'output_dir':'./models/distilbert_imdb',
+        'batch_size':16
+    },
     {
         'model': 'kallidavidson/TinyBERT_General_4L_312D',
         'dataset':'sst2',

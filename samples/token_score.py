@@ -7,13 +7,15 @@ from torch.nn.functional import softmax
 
 from typing import Iterable, Dict, Optional, Tuple, List
 
-from utils import filter_specials
+from utils import filter_specials, special_token_set
 
 from lime.lime_text import LimeTextExplainer
 from captum.attr import LayerIntegratedGradients
 import shap
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+SPECIALS = {"[CLS]", "[SEP]", "[PAD]", "<s>", "</s>", "<pad>"}
 
 def normalize(scores):
     scores = np.array(scores, dtype=float)
@@ -203,13 +205,14 @@ def build_lig(model, tokenizer, use_token_type):
     IG_CACHE[key] = lig
     return lig
 
+# Computes Integrated Gradients attribution scores:
 def get_ig_score(
     text,
     tokenizer,
     model,
     device=device,
     max_length=256,
-    n_steps=16, # lower=faster
+    n_steps=16, 
     internal_batch_size=None,
     use_abs=True,
     l1_normalize=True,
@@ -248,13 +251,17 @@ def get_ig_score(
         ] if t is not None
     }
     pad_id = tokenizer.pad_token_id or 0
+    # setting non-special tokens in the baseline to the PAD ID
     baseline[0] = torch.tensor([tid if tid in special_ids else pad_id for tid in input_ids[0].tolist()], device=device)
 
     # Captum: build or retrieve LIG on (model, tokenizer, use_token_type)
     use_token_type = token_type_ids is not None
     lig = build_lig(model, tokenizer, use_token_type)
 
-    tokens_raw = tokenizer.convert_ids_to_tokens(input_ids[0][:seq_len])  # fallback
+    tokens_raw = tokenizer.convert_ids_to_tokens(input_ids[0][:seq_len])
+
+    # get the set of special tokens by string for filtering the output
+    specials = special_token_set(tokenizer)
     
     try:
         atts = lig.attribute(
@@ -270,18 +277,22 @@ def get_ig_score(
 
         scores_raw = (atts.sum(dim=-1).squeeze(0)[:seq_len].detach().cpu().numpy())
         scores_proc = np.abs(scores_raw) if use_abs else scores_raw.copy()
+
         if l1_normalize:
             s = np.sum(scores_proc)
             if s > 0:
                 scores_proc = scores_proc / s
-        tokens, scores = filter_specials(tokens_raw, scores_proc.tolist())
-
+        
+        tokens_filtered, scores_filtered = filter_specials(tokens_raw, scores_proc.tolist(), specials)
+        
     except Exception as e:
         print(f"Attribution failed: {e}")
-        scores_raw = np.zeros(len(tokens))
-        scores_proc = np.zeros(len(tokens))
+        tokens_raw = tokens_raw or []
+        scores_raw = np.zeros(len(tokens_raw))
+        scores_proc = np.zeros(len(tokens_raw))
+        tokens_filtered, scores_filtered = filter_specials(tokens_raw, scores_proc.tolist(), specials)
 
-    return tokens, scores, scores_raw.tolist(), tokens_raw
+    return tokens_filtered, scores_filtered, scores_raw.tolist(), tokens_raw
 
 get_ig_score._needs_grad = True
 
@@ -289,6 +300,78 @@ get_ig_score._needs_grad = True
 
 ## === SHAP METHOD ===
 
+# simple alignment of SHAP word-level scores to model token-level scores
+def align_shap_simple(shap_tokens, shap_scores, model_tokens, SPECIALS):
+    scores = np.zeros(len(model_tokens))
+    
+    # Clean tokens for rough matching
+    def clean(t):
+        return t.replace('##', '').replace('▁', '').replace('Ġ', '').strip().lower()
+    
+    shap_words = [clean(t) for t in shap_tokens]
+    model_words = [clean(t) for t in model_tokens]
+    
+    shap_idx = 0
+    for i, model_word in enumerate(model_words):
+        # Skip special tokens
+        if model_tokens[i] in SPECIALS:
+            scores[i] = 0.0
+            continue
+        
+        # Find matching SHAP word
+        if shap_idx < len(shap_words):
+            if model_word and shap_words[shap_idx] and (
+                model_word in shap_words[shap_idx] or 
+                shap_words[shap_idx] in model_word
+            ):
+                scores[i] = shap_scores[shap_idx]
+            else:
+                shap_idx += 1
+                if shap_idx < len(shap_words):
+                    scores[i] = shap_scores[shap_idx]
+    
+    return scores
+
+def compute_masking_importance(text, tokenizer, model, device, max_length, pred_class):
+    inputs = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        max_length=max_length
+    ).to(device)
+    
+    input_ids = inputs['input_ids'][0]
+    attention_mask = inputs['attention_mask']
+    seq_len = len(input_ids)
+    
+    # Baseline (logit for the predicted class)
+    with torch.no_grad():
+        baseline_logits = model(**inputs).logits[0, pred_class].item()
+    
+    # Mask each token
+    scores = np.zeros(seq_len)
+    # use tokenizer's mask token ID, falling back to PAD ID or 0
+    mask_id = getattr(tokenizer, 'mask_token_id', tokenizer.pad_token_id or 0)
+    
+    for i in range(seq_len):
+        masked_ids = input_ids.clone()
+        # only mask if it's not a special token itself
+        tokens_raw = tokenizer.convert_ids_to_tokens(input_ids.tolist())
+        if tokens_raw[i] not in special_token_set(tokenizer):
+            masked_ids[i] = mask_id
+        
+        with torch.no_grad():
+            masked_output = model(
+                input_ids=masked_ids.unsqueeze(0),
+                attention_mask=attention_mask
+            )
+            masked_logits = masked_output.logits[0, pred_class].item()
+        
+        scores[i] = baseline_logits - masked_logits
+    
+    return scores
+
+# Computes SHAP attribution scores using the Explainer class
 @torch.no_grad()
 def get_shap_score(
     text,
@@ -312,12 +395,14 @@ def get_shap_score(
     ).to(device)
     
     tokens = tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])
-    seq_len = len(tokens)
     
     # Get prediction
     with torch.no_grad():
         outputs = model(**inputs)
         pred_class = outputs.logits.argmax(dim=-1).item()
+
+    # get the set of special tokens 
+    specials = special_token_set(tokenizer)
     
     try:
         # Create prediction function
@@ -328,7 +413,7 @@ def get_shap_score(
             elif isinstance(texts, np.ndarray):
                 texts = texts.flatten().tolist()
             elif isinstance(texts, list):
-                # flatten list of lists
+                # flatten list of lists from SHAP text splitting if needed 
                 if len(texts) > 0 and isinstance(texts[0], (list, np.ndarray)):
                     texts = [item for sublist in texts for item in (sublist.tolist() if isinstance(sublist, np.ndarray) else sublist)]
             else:
@@ -345,7 +430,7 @@ def get_shap_score(
             with torch.no_grad():
                 logits = model(**batch_inputs).logits
                 probs = torch.softmax(logits, dim=-1)
-
+            # SHAP expects output probabilities for classes
             return probs.cpu().numpy()
 
         
@@ -369,13 +454,13 @@ def get_shap_score(
         shap_tokens = shap_values.data[0]
         
         # Align SHAP scores to model tokens
-        scores_raw = align_shap_simple(shap_tokens, shap_scores, tokens)
+        scores_raw = align_shap_simple(shap_tokens, shap_scores, tokens, specials)
         
     except Exception as e:
-        print(f"⚠️  SHAP failed on text (len={len(text)}): {str(e)[:100]}")
-        print(f"   Falling back to masking-based importance")
+        print(f"SHAP failed on text (len={len(text)}): {str(e)[:100]}")
+        print(f"Falling back to masking-based importance")
         
-        # Fallback: masking-based importance
+        # masking-based importance
         scores_raw = compute_masking_importance(
             text, tokenizer, model, device, max_length, pred_class
         )
@@ -391,70 +476,6 @@ def get_shap_score(
         else:
             scores_processed = np.ones(len(scores_processed)) / len(scores_processed)
 
-    return tokens, scores_processed.tolist(), scores_raw.tolist(), tokens
+    tokens_filtered, scores_filtered = filter_specials(tokens, scores_processed.tolist(), SPECIALS)
 
-def align_shap_simple(shap_tokens, shap_scores, model_tokens):
-    scores = np.zeros(len(model_tokens))
-    
-    # Clean tokens
-    def clean(t):
-        return t.replace('##', '').replace('▁', '').replace('Ġ', '').strip().lower()
-    
-    shap_words = [clean(t) for t in shap_tokens]
-    model_words = [clean(t) for t in model_tokens]
-    
-    shap_idx = 0
-    for i, model_word in enumerate(model_words):
-        # Skip special tokens
-        if model_tokens[i] in ['[CLS]', '[SEP]', '[PAD]', '<s>', '</s>']:
-            scores[i] = 0.0
-            continue
-        
-        # Find matching SHAP word
-        if shap_idx < len(shap_words):
-            if model_word and shap_words[shap_idx] and (
-                model_word in shap_words[shap_idx] or 
-                shap_words[shap_idx] in model_word
-            ):
-                scores[i] = shap_scores[shap_idx]
-            else:
-                shap_idx += 1
-                if shap_idx < len(shap_words):
-                    scores[i] = shap_scores[shap_idx]
-    
-    return scores
-
-
-def compute_masking_importance(text, tokenizer, model, device, max_length, pred_class):
-    inputs = tokenizer(
-        text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=max_length
-    ).to(device)
-    
-    input_ids = inputs['input_ids'][0]
-    seq_len = len(input_ids)
-    
-    # Baseline
-    with torch.no_grad():
-        baseline_logits = model(**inputs).logits[0, pred_class].item()
-    
-    # Mask each token
-    scores = np.zeros(seq_len)
-    mask_id = getattr(tokenizer, 'mask_token_id', tokenizer.pad_token_id or 0)
-    
-    for i in range(seq_len):
-        masked_ids = input_ids.clone()
-        masked_ids[i] = mask_id
-        
-        with torch.no_grad():
-            masked_output = model(
-                input_ids=masked_ids.unsqueeze(0),
-                attention_mask=inputs['attention_mask']
-            )
-            masked_logits = masked_output.logits[0, pred_class].item()
-        
-        scores[i] = baseline_logits - masked_logits
-    
-    return scores
+    return tokens_filtered, scores_filtered, scores_raw.tolist(), tokens

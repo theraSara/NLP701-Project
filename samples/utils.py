@@ -15,6 +15,22 @@ def load_data(data_path):
         df = pd.DataFrame(samples)
         return df 
     
+def special_token_set(tokenizer):
+    return {
+        getattr(tokenizer, "cls_token", None),
+        getattr(tokenizer, "sep_token", None),
+        getattr(tokenizer, "pad_token", None),
+        getattr(tokenizer, "bos_token", None),
+        getattr(tokenizer, "eos_token", None),
+    }
+
+def filter_specials(tokens, scores, SPECIALS):
+    keep = [i for i, t in enumerate(tokens) if t not in SPECIALS]
+    if not keep:
+        # nothing left — return raw (or return empty & handle upstream)
+        return tokens, scores
+    return [tokens[i] for i in keep], [scores[i] for i in keep]
+
 def plot_stability(combined_df, RATIOS, out_dir, method_label, dataset_name):
     df = combined_df.copy()
     df["p"] = pd.to_numeric(df["p"], errors="coerce")
