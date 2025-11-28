@@ -3,6 +3,8 @@ import random
 from tqdm import tqdm
 from scipy.stats import spearmanr
 import pandas as pd
+import json
+from pathlib import Path
 
 
 # --- helper: shuffle tokens with a given ratio ---
@@ -35,21 +37,25 @@ def spearman_stability(scores1, scores2):
     return corr
 
 # --- main stability evaluation ---
-def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu"):
+def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu", save_log_to=None):
     """
     df: DataFrame with column 'texts'
     For each text: compute mean Spearman correlation for each shuffle ratio.
     """
-    results = {r: [] for r in ratios}
-    n_samples = len(df)
+    details = {}
+    results_per_ratio = {r: [] for r in ratios}
     for i, row in tqdm(df.iterrows(), total=len(df)):
-        if i >= n_samples:
-            break
         text = row["texts"]
+        sample_id = row.get("indices", i)
+        details[str(sample_id)] = {
+            "text": text,
+            "label": row.get("label", None),
+            "indices": sample_id
+        }
 
         # 1. Get attention-based importance for original
         try:
-            tokens, orig_scores = get_importance_fn(text, tokenizer, model, device=device)
+            _, base_scores, raw_score = get_importance_fn(text, tokenizer, model, device=device)
         except Exception:
             continue
 
@@ -57,12 +63,27 @@ def stability(df, tokenizer, model, get_importance_fn, ratios, device="cpu"):
         for r in ratios:
             shuffled_text = shuffle_tokens(text, r)
             try:
-                _, shuf_scores = get_importance_fn(shuffled_text, tokenizer, model, device=device)
+                _, shuf_scores, shuf_raw = get_importance_fn(shuffled_text, tokenizer, model, device=device)
             except Exception:
                 continue
-            corr = spearman_stability(orig_scores, shuf_scores)
-            results[r].append(corr)
+
+            corr = spearman_stability(base_scores, shuf_scores)
+            results_per_ratio[r].append(corr)
+            details[str(sample_id)][f"{r:.2f}"] = {
+                "spearman": corr,
+                "orig_raw_score": raw_score,
+                "shuf_raw_score": shuf_raw,
+            }
 
     # 3. Compute mean correlation per ratio
-    mean_stability = {r: np.nanmean(results[r]) for r in ratios}
-    return pd.DataFrame({"ratio": ratios, "mean_spearman": [mean_stability[r] for r in ratios]})
+    mean_stability = {r: float(np.nanmean(results_per_ratio[r])) if results_per_ratio[r] else np.nan for r in ratios}
+    df_plot = pd.DataFrame({"ratio": ratios, "mean_spearman": [mean_stability[r] for r in ratios]})
+
+    # save json
+    if save_log_to is not None:
+        Path(save_log_to).parent.mkdir(parents=True, exist_ok=True)
+        with open(save_log_to, "w", encoding="utf-8") as f:
+            json.dump({"by_id": details}, f, indent=2)
+        print(f"(stability) Per-sample Spearman log saved to: {save_log_to}")
+
+    return df_plot

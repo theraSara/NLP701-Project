@@ -3,7 +3,6 @@ import numpy as np
 import pickle 
 import pandas as pd 
 import matplotlib.pyplot as plt
-import os
 
 def set_seed(SEED=42): 
     random.seed(SEED)
