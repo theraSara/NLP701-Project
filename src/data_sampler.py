@@ -100,12 +100,8 @@ if __name__ == "__main__":
     sst_samples = sampler.sample_data('sst2', n_sampled=500) 
 
     print("Sampling IMDB dataset")
-<<<<<<< HEAD
     imdb_samples = sampler.sample_data('imdb', n_sampled=500)
 
     print("Summary:")
     print(f"SST-2: {len(sst_samples['texts'])} examples")
     print(f"IMDB: {len(imdb_samples['texts'])} examples")
-=======
-    sampler.sample_data('imdb', n_sampled=500)
->>>>>>> 0cd70999bb72719fa70accec54e26b25f71931de

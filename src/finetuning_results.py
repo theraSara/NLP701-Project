@@ -3,8 +3,8 @@ import pandas as pd
 from pathlib import Path
 
 def consolidate_results():
-    models = ['distilbert', 'tinybert', 'albert'] # delete or add according to the models you have used
-    datasets = ['sst2', 'imdb'] # delete or add according to the dataset you have used
+    models = ['distilbert', 'tinybert', 'albert'] 
+    datasets = ['sst2', 'imdb']
     
     results = []
     for model in models:

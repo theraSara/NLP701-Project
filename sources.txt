@@ -5,21 +5,19 @@ Some GitHub and other code sources:
 3. SHAP (SHapley Additive exPlanations): https://github.com/shap/shap
 4. Lime: Explaining the predictions of any machine learning classifier: https://github.com/marcotcr/lime
 https://marcotcr.github.io/lime/tutorials/Lime%20-%20basic%20usage%2C%20two%20class%20case.html
-5. Counterfactual sentences: https://github.com/tongshuangwu/polyjuice
-Other source to do the counterfactual explanations: https://github.com/allenai/mice
 
 
 |          Phase         |  Timeline  |      Status    |         Deliverable         |
 |------------------------|------------|----------------|-----------------------------|
 | Literature Review      |      -     |    Complete    | Comparison table of methods |
 | Model Training         | Week 7-8   |    Complete    | 6 trained models (3×2)      |
-| Data Sampling          | Week 8     |    Complete    | 924 sampled examples        |
-| **Midterm Report**     | Week 9     |     Current    | Progress summary            |
-| Explanation Generation | Week 9     |   In Progress  | ~3,696 explanations         |
-| Evaluation Metrics     | Week 10-11 |     Pending    | Faithfulness & Stability    |
-| LLM-as-Judge           | Week 11-12 |     Pending    | Qualitative ratings         |
-| Analysis & Writing     | Week 13    |     Pending    | Final report                |
-| Final Presentation     | Week 14    |     Pending    | Slides & presentation       |
+| Data Sampling          | Week 8     |    Complete    | 200 sampled examples        |
+| Midterm Report         | Week 9     |    Complete    | Progress summary            |
+| Explanation Generation | Week 9     |    Complete    | ~2,400 explanations         |
+| Evaluation Metrics     | Week 10-11 |    Complete    | Faithfulness & Stability    |
+| LLM-as-Judge           | Week 11-12 |    Complete    | Qualitative ratings         |
+| Analysis & Writing     | Week 13    |    Complete    | Final report                |
+| Final Presentation     | Week 14    |    Complete    | Slides & presentation       |
 
 
 PHASE 1: Setup and Baseline
@@ -27,7 +25,7 @@ PHASE 1: Setup and Baseline
 
 2. Data loading and exploration --> DONE
     - load SST-2 and IMDB using HuggingFace (HF) ``datasets``
-    - create stratified samples (500-1000 examples as we proposed)
+    - create stratified samples (200 examples)
     - document dataset statistics
 
 3. Model fine-tuning --> DONE
@@ -37,83 +35,38 @@ PHASE 1: Setup and Baseline
     - save checkpoints
 
 PHASE 2: Interpretability Methods
-1. Attention Visualization
+1. Attention Visualization --> DONE
     - extract attention weights from the models 
     - visualize using BertViz 
     - save attention matrices for evaluation
 
-2. Integrated Gradients
+2. Integrated Gradients --> DONE
     - use Captum's ``LayerIntegratedGradients``
     - generate attrubutions for sampled examples
 
-3. SHAP
+3. SHAP --> DONE
     - use ``shap.Explainer`` with transformer models
-    - limit to 100-200 examples (it is computationally costly...)
 
-4. LIME 
+4. LIME --> DONE
     - create text explainer 
     - generate local explanations
-
-5. Counterfactuals --> the most complex (leave it last if there's a time to even implement it)
-    - start simple: token deletion/replacement
-    - if time: use Polyjuice or mice (above in the sources)
 
 PHASE 3: Evaluation 
 1. Faithfulness
 2. Stability
-3. LLM-as-Judge
-
-
-here are the steps (pipeline) that i configured that we need to keep in mind while working:
-STEP 1: TRAINING (model_trainer.py) --> DONE
-    - Use: FULL training dataset (all 67k SST-2 / 25k IMDB)
-    - Why: Train the best possible model
-    - Output: Trained model checkpoint (/models)
-
-<<<<<<< HEAD
-STEP 2: INFERENCE (after training)
-=======
-STEP 2: INFERENCE (after training) --> DONE
->>>>>>> 0cd70999bb72719fa70accec54e26b25f71931de
-    - Use: FULL test set for accuracy metrics
-    - Output: Test accuracy, F1, and other measures if needed (/results/model_performance_summary.csv)
-
-STEP 3: SAMPLING (explanation_generator.py) --> DONE
-    - Use: Sample 500-1000 from test set (as we mentioned in the proposal)
-    - Why: Generating explanations is computationally expensive 
-        (especially SHAP - can take 10-30 seconds per example)
-        What i think is suitable is: 500 examples × 4 methods = 2000 explanations per model
-    - Output: Sampled examples for interpretation (/data)
-
-STEP 4: EXPLANATION GENERATION (explanation_generator.py)
-    - Use: The 500-1000 sampled examples
-    - Apply: All 4 interpretability methods
-    - Output: Explanations saved to disk
-
-STEP 5: EVALUATION (faithfulness.py, stability.py, and llm_judge.py)
-    - Use: The generated explanations
-<<<<<<< HEAD
-    - Output: Faithfulness, stability, and llm_judge metrics
-=======
-    - Output: Faithfulness, stability, and llm_judge metrics
-
-
-
+3. Efficiency
 
 Work division:
 Divide the work by dataset.
-1. SST-2 dataset has 424 total samples
+1. SST-2 dataset has 100 total samples
 3 models
 4 methods
-So the total number of samples would be: 424*3*4=5088 explanations
-Estimated time to run all methods together would be around 10-15 hours
+So the total number of samples would be: 100*3*4=1200 explanations
 
-2. IMDB dataset has 500 total samples
+2. IMDB dataset has 100 total samples
 3 models
 4 methods
-So the total number of samples would be: 500*3*4=6000 explanations
-Estimated time to run all methods together would be around 12-18 hours (longer texts/reviews)
+So the total number of samples would be: 100*3*4=1200 explanations
 
 This way each one of us will focus on one dataset and we can work in parallel instead of waiting for each others results.
 
->>>>>>> 0cd70999bb72719fa70accec54e26b25f71931de

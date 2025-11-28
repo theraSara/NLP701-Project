@@ -1,15 +1,20 @@
 import sys
+import torch
+import pandas as pd
 from pathlib import Path
 from typing import Callable, Dict
 
-import torch
-import pandas as pd
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
-from utils import set_seed, load_data, plot_stability, plot_comprehensiveness, plot_sufficiency
-from token_score import get_attention_score, get_lime_score, get_ig_score, get_shap_score
-from eval_stability import stability
-from eval_faithfulness import comprehensiveness, sufficiency
+from interpretability_methods.utils import set_seed, plot_stability, plot_comprehensiveness, plot_sufficiency
+
+from interpretability_methods.attention import get_attention_score
+from interpretability_methods.lime import get_lime_score
+from interpretability_methods.ig import get_ig_score
+from interpretability_methods.shap import get_shap_score
+
+from eval.eval_stability import stability
+from eval.eval_faithfulness import comprehensiveness, sufficiency
 
 # Make DEVICE available to all functions
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -19,10 +24,6 @@ def ensure_dir(path):  # if <3.10: use Union[str, Path]
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
     return p
-
-def save_json():
-    json = "CODE implementation for saving to json file"
-    return json
 
 def load_model_and_tokenizer(model_dir: str):
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
@@ -180,33 +181,8 @@ if __name__ == "__main__":
     imdb_df = pd.read_csv("data/permutated100/sst2_shuffled_100.csv")[["texts","labels","indices"]].iloc[:sample]
     sst2_df = pd.read_csv("data/permutated100/sst2_shuffled_100.csv")[["texts","labels","indices"]].iloc[:sample]
 
-    # imdb_path = 'sampled/imdb_sampled_500.pkl'
-    # sst2_path = 'sampled/sst2_sampled_436.pkl'
-
-    # n_samples = 1
-    # imdb_df = load_data(imdb_path).iloc[:n_samples]
-    # sst2_df = load_data(sst2_path).iloc[:n_samples]
-
+    # q top token ratios
     RATIOS = [0.01, 0.05, 0.10, 0.20, 0.50]
-
-    # datasets: Dict[str, Dict] = {
-    #     "SST2": {
-    #         "data": sst2_df,
-    #         "models": {
-    #             "TinyBERT": r"D:/master/NLP/models/tinybert_sst2/final",
-    #             "DistilBERT": r"D:/master/NLP/models/distilbert_sst2/final",
-    #             "ALBERT": r"D:/master/NLP/models/albert_sst2/final",
-    #         },
-    #     },
-    #     "IMDB": {
-    #         "data": imdb_df,
-    #         "models": {
-    #             "TinyBERT": r"D:/master/NLP/models/tinybert_imdb/final",
-    #             "DistilBERT": r"D:/master/NLP/models/distilbert_imdb/final",
-    #             "ALBERT": r"D:/master/NLP/models/albert_imdb/final",
-    #         },
-    #     },
-    # }
 
     datasets: Dict[str, Dict] = {
         "SST2": {
@@ -226,7 +202,6 @@ if __name__ == "__main__":
             },
         },
     }
-
 
     METHODS: Dict[str, Dict[str, Callable]] = {
         "attention": {"label": "Attention", "fn": get_attention_score},

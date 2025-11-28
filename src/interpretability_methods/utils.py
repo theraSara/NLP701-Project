@@ -15,6 +15,14 @@ def load_data(data_path):
         df = pd.DataFrame(samples)
         return df 
     
+def normalize(scores):
+    scores = np.array(scores, dtype=float)
+    # absolute 
+    scores = np.abs(scores)
+    # l1
+    scores = scores / (scores.sum() + 1e-12)
+    return scores
+
 def special_token_set(tokenizer):
     return {
         getattr(tokenizer, "cls_token", None),
