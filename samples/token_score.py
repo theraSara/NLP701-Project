@@ -72,13 +72,16 @@ def get_attention_score(
 
     # CLS → token row
     cls_row = att[cls_pos, :seq_len]
-    scores = cls_row.tolist()
-    normalized_scores = normalize(cls_row).tolist()
+    raw_scores = cls_row.tolist()
+    scores = normalize(cls_row).tolist()
 
     # tokens
-    tokens = tokenizer.convert_ids_to_tokens(input_ids[:seq_len])
+    raw_tokens = tokenizer.convert_ids_to_tokens(input_ids[:seq_len])
 
-    return tokens, normalized_scores, scores
+    specials = special_token_set(tokenizer) 
+    tokens, scores = filter_specials(raw_tokens, scores, specials)
+
+    return tokens, scores, raw_scores, raw_tokens
 
 #############################################################################################################
 
@@ -146,7 +149,11 @@ def get_lime_score(
             scores.append(sc)
     
     normalized_scores = normalize(scores).tolist()
-    return tokens, normalized_scores, scores.tolist(),
+
+    specials = special_token_set(tokenizer) 
+    tokens_n, scores_n = filter_specials(tokens, normalized_scores, specials)
+
+    return tokens_n, scores_n, scores, tokens
 
 #############################################################################################################
 
