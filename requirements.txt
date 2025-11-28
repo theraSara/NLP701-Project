@@ -36,3 +36,4 @@ shap
 torch
 tqdm 
 transformers
+lime
