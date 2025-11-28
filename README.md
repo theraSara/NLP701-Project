@@ -132,6 +132,7 @@ All models must follow the Hugging Face format (with `config.json`, `pytorch_mod
 └── results/                         # CSVs + figures 
 ```
 
+Both data and results folders can be found [here]. (https://mbzuaiac-my.sharepoint.com/:f:/g/personal/sara_alhajeri_mbzuai_ac_ae/EqCEyEizpIBJiSQEkLME4nwB4FD1LqyjhkLyYH7OssnYuw?e=utslLP)
 ## 5. Running the Evaluation
 
 The entry point is:
